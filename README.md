@@ -4,3 +4,5 @@
 
 Notes and work for Applied Multilevel Modeling course
 
+Google Group link: https://groups.google.com/g/applied-multilevel-modeling-short-course
+
