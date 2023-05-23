@@ -1,0 +1,246 @@
+---
+title: "MLM Chapter 5"
+author: "Doug Luke"
+date: "12/29/2019"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: false
+    theme: lumen
+    highlight: textmate
+---
+
+# Extending the Basic Model
+{#chap:extensions} 
+
+```{r setupext, message=FALSE}
+library(LukeMLM)
+library(lme4)
+library(xtable)
+library(ggplot2)
+```
+
+## The Flexibility of the Mixed-Effects Model
+{#sec:flexibility}
+
+## Generalized Models
+{#sec:generalized}
+
+### Binary outcomes
+{#subsec:binary}
+
+
+
+```{r plotlogittransform}
+
+p <- seq(.001,.999,.001)
+lp <- qlogis(p)
+
+df <- data.frame(
+p = p,
+lp = lp
+)
+
+ggplot(data=df,aes(x=p, y=lp)) +
+  geom_line() +
+#  scale_linetype_discrete(name="Acres") +
+  xlab(expression(italic("p"))) +
+  ylab(expression(paste("logit(",italic("p"),")"))) +
+  theme_bw() 
+  
+```
+
+
+
+```{r votebinary, echo=FALSE,results=FALSE}
+data(tobvote)
+# levels(tobvote$votedpro)
+# table(tobvote$votedpro)
+# tobvote$votedpro_bin <- as.numeric(tobvote$votedpro)-1
+gmod1 <- glmer(votedpro ~ party + pactotal + (1|cmid), data=tobvote, family=binomial)
+summary(gmod1)
+```
+
+
+```{r plotbinary1}
+
+# Fixes for later: put into ggplot and don't use hand-coded values
+x <- seq(0,113,.5)
+
+ydem <- plogis(-1.86 + x*.035)
+yrep <- plogis(-1.86 + 2.72 + x*.035)
+
+plot(x,ydem,type="l",col="black",lty=1,
+	xlim=c(0,125),ylim=c(0,1.1),
+	ylab="Predicted protobacco voting probabilities",xlab="PAC contributions ($K)")
+points(x,yrep,type="l",lty=2,col="gray20")
+legend(c(70,108),c(.18,.4), c("Republican","Democrat"),
+	col=c("gray20","black"),lty=c(2,1),cex=1.2,box.lty=0)
+```
+
+### Count outcomes
+{#subsec:counts}
+
+
+```{r alcsetup}
+
+# Fixes for later: larger sample size, make prettier, use consistent ggplot formatting, select true random subset
+data(nlsy)
+
+nwrk <- nlsy[nlsy$alcday>=0 & nlsy$smkday>=0,]
+nwrk <- nwrk[1:5000,]
+```
+
+
+```{r alcdist}
+ggplot(nwrk, aes(x=alcday)) + 
+  scale_x_continuous(name = "Number of alcohol days") +
+  scale_y_continuous(name = "Density") +
+  geom_density(alpha=0.3,color="gray20",fill="gray80") +
+  theme_minimal()
+
+```
+
+
+```{r countsetup}
+library(lme4)
+compare <- mean(subset(nwrk, sex97 == "Female" & nonwhite == "Non-white")$alcday)
+mod1 <- lmer(alcday ~  sex97 + nonwhite + (1|pubid), data=nwrk)
+summary(mod1)
+
+gmod1 <- glmer(alcday ~  sex97 + nonwhite + (1|pubid), data=nwrk, family=poisson)
+summary(gmod1)
+
+```
+
+Note: The models in the following code chunk will take some time to run.
+
+```{r countmodels,warning=FALSE,message=FALSE}
+# NOte for later: to install glmmADMB I had to choose option 4 on this page:
+# https://r-forge.r-project.org/scm/viewvc.php/*checkout*/www/index.html?revision=197&root=glmmadmb
+# install.packages("glmmADMB", repos="http://www.math.mcmaster.ca/bolker/R",type="source")
+library(glmmADMB)
+
+nwrk$pubid2 <- factor(nwrk$pubid)
+cmod_poiss <- glmmadmb(alcday ~  smkday + sex97 + nonwhite + (1|pubid2), data=nwrk, 
+               zeroInflation=FALSE,family="poisson")
+summary(cmod_poiss)
+
+cmod_zip <- glmmadmb(alcday ~  smkday + sex97 + nonwhite + (1|pubid2), data=nwrk, 
+               zeroInflation=TRUE,family="poisson")
+summary(cmod_zip)
+
+cmod_zipnbinom <- glmmadmb(alcday ~  smkday + sex97 + nonwhite + (1|pubid2), data=nwrk, 
+               zeroInflation=TRUE,family="nbinom")
+summary(cmod_zipnbinom)
+
+AIC(cmod_poiss,cmod_zip,cmod_zipnbinom)
+
+
+```
+
+```{r overdispfun,warning=FALSE,message=FALSE}
+
+overdisp_fun <- function(model) {
+  ## number of variance parameters in 
+  ##   an n-by-n variance-covariance matrix
+  vpars <- function(m) {
+    nrow(m)*(nrow(m)+1)/2
+  }
+  model.df <- sum(sapply(VarCorr(model),vpars))+length(fixef(model))
+  rdf <- nrow(model.frame(model))-model.df
+  rp <- residuals(model,type="pearson")
+  Pearson.chisq <- sum(rp^2)
+  prat <- Pearson.chisq/rdf
+  pval <- pchisq(Pearson.chisq, df=rdf, lower.tail=FALSE)
+  c(chisq=Pearson.chisq,ratio=prat,rdf=rdf,p=pval)
+}
+```
+
+
+```{r overdispnlsy,warning=FALSE,message=FALSE}
+od1 <- overdisp_fun(cmod_poiss)
+od2 <- overdisp_fun(cmod_zip)
+od3 <- overdisp_fun(cmod_zipnbinom)
+od1
+od2
+od3
+```
+
+
+## Three-level Models
+{#sec:3level}
+
+```{r vote3level}
+data(tobvote)
+# levels(tobvote$votedpro)
+# table(tobvote$votedpro)
+# tobvote$votedpro_bin <- as.numeric(tobvote$votedpro)-1
+gmod2 <- glmer(votedpro ~ party + pactotal + acres + (1|cmid) + (party|state), data=tobvote, family=binomial)
+summary(gmod2)
+```
+
+
+```{r plot3lvl1}
+
+# Fixes for later: put into ggplot and don't use hand-coded values
+x <- seq(0,113,.5)
+
+ydem_a0 <- plogis(-1.79 + x*.025)
+yrep_a0 <- plogis(-1.79 + 2.63 + x*.025)
+
+ydem_a10 <- plogis(-1.79 + x*.025 + 10*.006)
+yrep_a10 <- plogis(-1.79 + 2.63 + x*.025 + 10*.006)
+
+ydem_a100 <- plogis(-1.79 + x*.025 + 100*.006)
+yrep_a100 <- plogis(-1.79 + 2.63 + x*.025 + 100*.006)
+
+plot(x,ydem_a0,type="l",col="black",lty=1,lwd=2,
+	xlim=c(0,125),ylim=c(0,1.1),
+	ylab="Predicted protobacco voting probabilities",xlab="PAC contributions ($K)")
+
+points(x,ydem_a10,type="l",lty=2,col="black",lwd=2)
+points(x,ydem_a100,type="l",lty=3,col="black",lwd=2)
+
+points(x,yrep_a0,type="l",lty=1,col="gray40",lwd=1.5)
+points(x,yrep_a10,type="l",lty=2,col="gray40",lwd=1.5)
+points(x,yrep_a100,type="l",lty=3,col="gray40",lwd=1.5)
+
+legend(c(58,105),c(-.02,.40), 
+       c("Republican - 100K Acres",
+         "Republican - 10K Acres",
+         "Republican - 0K Acres",
+         "Democrat - 100K Acres",
+         "Democrat - 10K Acres",
+         "Democrat - 0K Acres"),
+	col=c("gray40","gray40","gray40","black","black","black"),
+	lty=c(3,2,1),lwd=c(1.5,1.5,1.5,2,2,2),cex=1.1,
+	box.lty=0)
+```
+
+## Cross-classified Models
+{#sec:crossclass}
+
+
+```{r ctabmodelswarning=FALSE,message=FALSE}
+library(lmerTest)
+data(pupcross)
+m1<-lmer(achiev ~ 1 + (1|sschool) + (1|pschool), 
+         data=pupcross, REML=FALSE)
+summary(m1)
+
+m2 <-lmer(achiev ~ pupsex  + pupses + 
+  (1|sschool) + (1|pschool), data=pupcross, REML=FALSE)
+summary(m2)
+
+m3 <-lmer(achiev ~ pupsex  + pupses + pdenom + sdenom +
+  (1|sschool) + (1|pschool), data=pupcross, REML=FALSE)
+summary(m3)
+
+m4 <-lmer(achiev ~ pupsex  + pupses + pdenom + sdenom +
+  (pupses|sschool) + (pupses|pschool), data=pupcross, REML=FALSE)
+summary(m4)
+
+anova(m1,m2,m3,m4)
+```

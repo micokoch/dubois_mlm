@@ -1,0 +1,264 @@
+---
+title: "MLM Chapter 3"
+author: "Doug Luke"
+date: "12/28/2019"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: false
+    theme: lumen
+    highlight: textmate
+---
+
+# Building a Multilevel Model
+{#chap:build} 
+
+```{r setupbuild, message=FALSE,warning=FALSE}
+library(xtable)
+library(LukeMLM)
+library(lme4)
+library(dplyr)
+library(tidyr)
+data("tvprp")
+```
+
+
+## Introduction to Tobacco Voting Data Set
+{#sec:tobdata}
+
+## Assessing the Need for a Multilevel Model
+{#sec:assessingneed}
+
+
+```{r plotmapsetup, message=FALSE, warning=FALSE}
+library(LukeMLM)
+library(dplyr)
+
+data("tvprp")
+
+state_vote <- tvprp %>%
+  select(state,votepct) %>%
+  group_by(state) %>%
+  summarize(count = n(),mean_vote = mean(votepct, na.rm=TRUE)) %>%
+  filter(state != "AK" & state != "HI")
+
+state_vote
+vote_df <- data.frame(state_vote)
+
+# detach("package:dplyr", unload=TRUE)
+
+library(ggplot2)
+library(viridis)
+library(maps)
+library(scales)
+
+state_df <- map_data("state")
+state_df$state <- state.abb[match(state_df$region, tolower(state.name))]
+
+choropleth <- merge(state_df,vote_df, by="state")
+head(choropleth)
+choropleth <- choropleth[order(choropleth$order), ]
+
+# Discretise rate to use with Brewer colour scheme - many options here
+# choropleth$rate_d <- cut_number(choropleth$rate, 5)
+# choropleth$mean_vote_d <- cut_interval(choropleth$mean_vote, 5)
+choropleth$mean_vote_d <- cut(choropleth$mean_vote, breaks = c(seq(0, 1, by = .2)))
+```
+
+```{r plotmapC, message=FALSE, warning=FALSE}
+ggplot(choropleth, aes(long, lat, group = group)) +
+  geom_polygon(aes(fill = mean_vote), colour = alpha("white", 1/2), size = 0.2) +
+  geom_polygon(data = state_df, colour = "white", fill = NA) +
+  coord_fixed(1.3) +
+  theme_void() +
+  theme(legend.position = "bottom") +
+  scale_fill_viridis(
+    option = "viridis",
+    direction = -1,
+    discrete = FALSE,
+    name = "Average Vote %",
+    guide = guide_colorbar(
+      direction = "horizontal",
+      barheight = unit(2, units = "mm"),
+      barwidth = unit(50, units = "mm"),
+      draw.ulim = F,
+      title.position = 'top',
+      # some shifting around
+      title.hjust = 0.5,
+      label.hjust = 0.5
+  ))
+```
+
+
+
+```{r plotscatterxC,warning=F,message=F}
+# This is the color version
+library(ggplot2)
+library(scales)
+data("tvprp")
+
+tvlrg <- tvprp[tvprp$state %in% c("CA","FL","IL","NY"),]
+
+ggplot(data = tvlrg, mapping = aes(x = pactotal, y = votepct, color = state, shape = state, linetype = state )) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm", se = FALSE,fullrange = FALSE) +
+  scale_y_continuous(labels=percent, limits=c(0,1.05)) +
+  scale_shape_manual(values = c(1,2,0,23)) +
+  scale_linetype_manual(name="State",values=c("solid","dotted","longdash","dotdash")) +
+  labs(x = "PAC Money ($K)", y = "Vote %\n", color = "State", shape = "State", linetype = "State") +
+  theme_minimal() +
+  theme(legend.position="bottom",legend.key.width = unit(2.5, "line"))
+```
+
+
+```{r plotscatterxBW,warning=F,message=F}
+# This is the B&W version
+library(ggplot2)
+library(scales)
+data("tvprp")
+
+tvlrg <- tvprp[tvprp$state %in% c("CA","FL","IL","NY"),]
+
+ggplot(data = tvlrg, mapping = aes(x = pactotal, y = votepct, shape = state, linetype = state )) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm", se = FALSE, fullrange = FALSE, color="black") +
+  scale_y_continuous(labels=percent, limits=c(0,1.05)) +
+  scale_shape_manual(values = c(1,2,0,23)) +
+  scale_linetype_manual(name="State",values=c("solid","dotted","longdash","dotdash")) +
+  labs(x = "PAC Money ($K)", y = "Vote %\n", shape = "State", linetype = "State") +
+  theme_minimal() +
+  theme(legend.justification = c(0, 1), legend.position = c(.6, .35), 
+        legend.background = element_rect(colour = NA, fill = "gray80"),
+         legend.key.width = unit(2.5, "line"))
+```
+
+
+```{r plotsplom2}
+library(ggplot2)
+tvprp$statenew <- with(tvprp, reorder(state, votepct, mean))
+
+ggplot(data = tvprp, mapping = aes(x = pactotal, y = votepct)) +
+  geom_point() + 
+  facet_wrap( ~ statenew) + 
+  geom_smooth(method="lm", se=FALSE, color = "black", size = .8) +
+  labs(x = "PAC Money ($K)",y = "Vote %") +
+  theme_bw()
+```
+
+
+```{r nullmodelR, eval=TRUE}
+mod0 <- lmer(votepct ~ 1 + (1|state),data=tvprp,REML=FALSE)
+cf1 <- summary(mod0)$coefficients
+
+vc1 <- as.data.frame(VarCorr(mod0))
+```
+
+## Model-building Strategies
+{#sec:modelstrategies}
+
+### Top-down strategy
+
+### Bottom-up strategy
+
+
+```{r mod1R, eval=TRUE}
+# Bringing in output from external file. Remember to double check accuracy.
+mod1 <- lmer(votepct ~ party + pactotal + (party|state),data=tvprp,REML=FALSE)
+mod1b <- lmer(votepct ~ party + pactotal + (party|state),data=tvprp,REML=TRUE)
+```
+
+## Estimation
+{#sec:estimation}
+
+```{r MLREMLcomparison}
+# Switch from hand-coding
+# These estimates are from Stata
+
+df.estcomp <- data.frame(
+  mlvc = c(.0135,.0079,.0274),
+  mllci = c(.0067,.0028,.0240),
+  mluci = c(.0272,.0226,.0314),
+  b1 = rep(NA,3),  
+  remlvc = c(.0141,.0085,.0275),
+  remllci = c(.0070,.0030,.0240),
+  remluci = c(.0284,.0237,.0314),
+  check.names = FALSE
+)
+```
+
+## Level-2 Predictors and Cross-Level Interactions
+{#sec:crosslevel}
+
+## Hypothesis Testing
+{#sec:hypothesis}
+
+
+```{r mod1}
+# Not being used for now
+mod1 <- lmer(votepct ~ party + pactotal + (party|state),data=tvprp,REML=FALSE)
+summary(mod1)
+```
+
+```{r mod2}
+mod2 <- lmer(votepct ~ party + pactotal + acres + (party|state),data=tvprp,REML=FALSE)
+summary(mod2)
+```
+
+```{r mod3}
+mod3 <- lmer(votepct ~ party*acres + pactotal*acres + 
+    (party | state),data=tvprp, REML=FALSE)
+summary(mod3)
+
+```
+
+```{r mod3comp}
+mod3a <- lmer(votepct ~ party*acres + pactotal*acres + 
+    (1 | state),data=tvprp, REML=FALSE)
+mod3b <- lmer(votepct ~ party*acres + pactotal*acres + 
+    (party | state),data=tvprp, REML=FALSE)
+mod3c <- lmer(votepct ~ party*acres + pactotal*acres + 
+    (party + pactotal | state),data=tvprp, REML=FALSE)
+
+summary(mod3a)
+summary(mod3b)
+summary(mod3c)
+
+mod3LR <- anova(mod3a,mod3b,mod3c)
+
+```
+
+```{r plotmod3g, warning=FALSE}
+mod3 <- lmer(votepct ~ party*acres + pactotal*acres + 
+    (party | state),data=tvprp, REML=FALSE)
+
+gvote <- function(money,acres){
+  ac <- acres
+  x <- money
+  pred_vote <- (fixef(mod3)[[1]] + fixef(mod3)[[3]]*ac + 
+    (fixef(mod3)[[4]] + fixef(mod3)[[6]]*ac)*x)
+  pred_vote
+}
+
+dat1 <- data.frame(
+  money = c(0,100,0,100,0,100),
+  acres = factor(c("None","None","Moderate","Moderate","High","High"),levels=c("None","Moderate","High")),
+  vote = c(gvote(0,0),gvote(100,0),gvote(0,30),gvote(100,30),gvote(0,220),gvote(100,220))
+)
+
+ggplot(data=dat1,aes(x=money, y=vote, group = acres)) +
+  geom_line(aes(linetype=acres)) +
+  scale_colour_hue(name="Acres",l=30) +
+  scale_linetype_manual(name="Acres",values=c("solid","dotted","longdash")) +
+  scale_y_continuous(labels=percent, limits=c(0,1)) +
+  xlab("PAC contributions ($K)") +
+  ylab("Predicted voting--Democrats (%)\n") +
+  theme_minimal() +
+  theme(legend.position = c(.80,.25),
+        legend.title=element_text(size=14),
+        legend.text=element_text(size=12),
+        legend.background = element_rect(colour = NA, fill = "gray80"),
+        legend.key.width = unit(2, "line"))
+  
+```
+

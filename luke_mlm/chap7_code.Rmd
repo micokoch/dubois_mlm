@@ -1,0 +1,53 @@
+---
+title: "MLM Chapter 7"
+author: "Doug Luke"
+date: "12/28/2019"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: false
+    theme: lumen
+    highlight: textmate
+---
+
+
+# Guidance
+{#chap:guidance} 
+
+```{r setupres,message=FALSE}
+library(xtable)
+library(LukeMLM)
+library(lme4)
+data("tvprp")
+```
+
+## Recommendations for Presenting Results
+{#sec:presentation}
+
+
+
+```{r tabledesigncalcs, warning=FALSE, message=FALSE}
+# Using lmerTest for p-values
+library(lmerTest)
+
+mod0d <- lmer(votepct ~ 1 + (1|state),data=tvprp,REML=FALSE)
+mod1d <- lmer(votepct ~ party + pactotal + (party|state),data=tvprp,REML=FALSE)
+mod2d <- lmer(votepct ~ party + pactotal + acres + gsp + (party|state),data=tvprp,REML=FALSE)
+
+```
+
+## Useful Resources
+{#sec:resources}
+
+### Books
+{#subsec:resbooks}
+
+### Online Resources
+{#subsec:resonline}
+
+
+```{r echo=FALSE,message=FALSE,warning=FALSE}
+detach("package:lmerTest", unload=TRUE)
+```
+

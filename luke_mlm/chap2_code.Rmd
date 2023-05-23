@@ -1,0 +1,55 @@
+---
+title: "MLM Chapter 2"
+author: "Doug Luke"
+date: "12/21/2019"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: false
+    theme: lumen
+    highlight: textmate
+---
+
+# Basic Multilevel Modeling
+{#chap:basic} 
+
+```{r setupbasic, echo=FALSE,message=FALSE,warning=FALSE}
+library(xtable)
+library(LukeMLM)
+library(lme4)
+library(dplyr)
+library(tidyr)
+data("tvprp")
+```
+
+
+## The Basic Two-Level Multilevel Model
+{#sec:basictwolevel}
+
+
+### The Importance of Random Effects
+
+
+### Classifying Multilevel Models
+
+
+```{r plotbasic1}
+op <- par(mfrow=c(1,2))
+xdum <- 0:5
+ydum <- 0:5
+plot(xdum,ydum,type="n",main="Varying Intercepts",
+     xlab="Level-1 Predictor",ylab="Dependent Variable")
+segments(1,1,4,2.5)
+segments(1,2,4,3.5)
+segments(1,3,4,4.5)
+plot(xdum,ydum,type="n",
+     main="Varying Intercepts and Slopes",
+     xlab="Level-1 Predictor",ylab="")
+segments(1,1,4,2.5)
+segments(1,1.2,4,3.8)
+segments(1,3.5,4,4.5)
+par(op)
+```
+
+

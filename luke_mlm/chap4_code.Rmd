@@ -1,0 +1,764 @@
+---
+title: "MLM Chapter 4"
+author: "Doug Luke"
+date: "12/28/2019"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: false
+    theme: lumen
+    highlight: textmate
+---
+
+# Assessing a Multilevel Model
+{#chap:assess} 
+
+```{r setupassess, message=FALSE,warning=FALSE}
+library(LukeMLM)
+library(lme4)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(scales)
+data("tvprp")
+```
+
+## Assessing Model Fit and Performance
+{#sec:modelfit}
+
+### Assessing Model Fit--Deviance and R$^{2$}
+
+```{r multiR2,warning=FALSE,message=FALSE}
+
+library(dplyr)
+data("tvprp")
+
+# state_cnt <- tvprp %>% 
+#   count(state)
+
+state_cnt <- tvprp %>%
+  group_by(state) %>%
+  summarise(count = n())
+
+
+Hmean <- length(state_cnt$count) / sum(1/state_cnt$count)
+
+
+mod0 <- lmer(votepct ~ 1 + (1|state),data=tvprp,REML=FALSE)
+
+# From previous chapter
+mod3 <- lmer(votepct ~ party*acres + pactotal*acres + 
+    (party | state),data=tvprp, REML=FALSE)
+
+mod3x <- lmer(votepct ~ party*acres + pactotal*acres + 
+    (1 | state),data=tvprp, REML=FALSE)
+
+var.df0 <- as.data.frame(VarCorr(mod0))
+var.df3 <- as.data.frame(VarCorr(mod3x))
+
+```
+
+
+### Evaluating the Model: Diagnostics
+
+
+
+```{r plotmod3residgg}
+# Had to do some finagling to get the boxes to print out right.
+ggplot(tvprp,aes(reorder(state,resid(mod3),median),resid(mod3))) +
+  geom_boxplot() + coord_flip() +
+  geom_hline(yintercept=0,linetype=3,size = 0.6) +
+  ylab("Level 1 residuals for Model 3") +
+  xlab("State") +
+  theme_minimal()
+
+```
+
+```{r plotmod3stdresidgg}
+ggplot(data = tvprp, mapping = aes(x = fitted(mod3), y = resid(mod3))) +
+  geom_point() + 
+  facet_wrap( ~ party) + 
+  geom_text(aes(label=ifelse(abs(resid(mod3)) > .4,paste(state,"-",lastname),'')),
+            hjust=0, nudge_x = 0.025, size=2.6) +
+  labs(x = "Fitted values",y = "Level 1 residuals") +
+  theme_bw() +
+  theme(panel.spacing = unit(1, "lines"))
+
+```
+
+
+```{r plotmod3qqgg}
+   y <- quantile(resid(mod3), c(0.25, 0.75))
+    x <- qnorm(c(0.25, 0.75))
+    slope <- diff(y)/diff(x)
+    int <- y[1] - slope * x[1]
+
+ggplot(data = tvprp, mapping = aes(sample = resid(mod3))) +
+  stat_qq(alpha = 0.5) +
+  geom_abline(slope = slope, intercept = int, color="blue") +
+  xlab("Normal quantiles") +
+  ylab("Level 1 residuals") +
+  theme_minimal()
+```
+
+```{r plotmod3qqgroup}
+# See code below to see if we can add fitted lines. Also see https://stackoverflow.com/questions/43696806/r-ggplot-different-geom-ablines-in-facets
+
+ggplot(data = tvprp, mapping = aes(sample = resid(mod3))) +
+  stat_qq(alpha = 0.5) + 
+  stat_qq_line() +
+  facet_wrap( ~ party) + 
+  xlab("Normal quantiles") +
+  ylab("Level 1 residuals") +
+  theme_bw() +
+  theme(panel.spacing = unit(1, "lines"))
+
+```
+
+
+```{r plotmod3qqlvl2random}
+require(gridExtra)
+rdf <- data.frame(ranef(mod3)$state)
+rnd_int <- rdf[,1]
+rnd_prty <- rdf[,2]
+
+y <- quantile(rnd_int, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y)/diff(x)
+int <- y[1] - slope * x[1]
+
+plot_int <- ggplot(mapping = aes(sample = rnd_int)) +
+  stat_qq(alpha = 0.5) +
+  geom_abline(slope = slope, intercept = int, color="blue") +
+  xlab("Normal quantiles") +
+  ylab("Level 2 random effects") +
+  labs(subtitle = "Intercept random effect") +
+  theme_bw()
+
+y <- quantile(rnd_prty, c(0.25, 0.75))
+x <- qnorm(c(0.25, 0.75))
+slope <- diff(y)/diff(x)
+int <- y[1] - slope * x[1]
+
+plot_prty <- ggplot(mapping = aes(sample = rnd_prty)) +
+  stat_qq(alpha = 0.5) +
+  geom_abline(slope = slope, intercept = int, color="blue") +
+  xlab("Normal quantiles") +
+  ylab("Level 2 random effects") +
+  labs(subtitle = "Party random effect") +
+  theme_bw()
+
+grid.arrange(plot_int,plot_prty,ncol=2)
+```
+
+### Evaluating the Model: Influence Statistics
+
+
+```{r influencetesting,warning=FALSE}
+
+# Keeping this in for now, shows how to look at dfbetas.
+library(influence.ME)
+
+estinf.mod3 <- influence(mod3,"state")
+
+dfbetas(estinf.mod3,parameters=c(2,3,4))
+
+plot(estinf.mod3,
+    which="dfbetas",
+    parameters=c(2,3,4),
+    xlab="DFbetaS",
+    ylab="State")
+
+cooks.distance(estinf.mod3,
+  parameters=0, sort=TRUE)
+
+plot(estinf.mod3, which="cook",
+  cutoff=.08, sort=TRUE,
+  xlab="Cook\ ??s distance",
+  ylab="State")
+```
+
+
+```{r plotcooksd,warning=FALSE}
+library(influence.ME)
+
+estinf.mod3 <- influence(mod3,"state")
+
+plot(estinf.mod3, which="cook",
+  cutoff=.08, sort=TRUE,
+  xlab="Cook's distance",
+  ylab="State")
+
+```
+
+
+```{r dfbetastable}
+library(dplyr)
+
+cookd <- cooks.distance(estinf.mod3,
+  parameters=0, sort=FALSE)
+dfb <- dfbetas(estinf.mod3,parameters=c(2,3,4))
+
+
+df.dfb <- data.frame(
+  state = rownames(cookd),
+  cookd = cookd,
+  dfb_party = dfb[,1],
+  dfb_money = dfb[,3],
+  dfb_acres = dfb[,2]
+  
+)
+
+df.dfb2 <- df.dfb %>%
+  arrange(desc(cookd)) %>%
+  filter(cookd > .05)
+
+```
+
+
+```{r mod3influence,warning=FALSE}
+
+# Comparing Model 3 after dropping influential states
+library(dplyr)
+mod3_all <- lmer(votepct ~ party*acres + pactotal*acres + 
+    (party | state),data=tvprp, REML=FALSE)
+
+tvprp_inf <- filter(tvprp, !state %in% c("NY","KY","CA","NJ"))
+
+mod3_inf <- lmer(votepct ~ party*acres + pactotal*acres + 
+    (party | state),data=tvprp_inf, REML=FALSE)
+
+```
+
+## Estimating Posterior Means
+{#sec:prediction}
+
+
+
+```{r setupBLUBS}
+# Keeping in for now, but more direct way is: coef(mod3)
+fix.int <- fixef(mod3)[1]
+fix.prty <- fixef(mod3)[2]
+
+eb.int <- ranef(mod3)$state[,1] + fix.int
+eb.prty <- ranef(mod3)$state[,2] + fix.prty
+
+state_info <- tvprp %>%
+  group_by(state) %>%
+  summarise(size = first(n_reps),
+            acres = first(acres))
+
+blupdf <- cbind(state_info[,1:2],eb.int,eb.prty,state_info[,3])
+```
+
+
+
+```{r plotmod3blups_setup}
+
+library(dplyr)
+library(tidyr)
+# Use state_info created above
+stacres <- state_info$acres
+
+# Store the posterior means in a data frame
+pmdf <- data.frame(coef(mod3)$state)
+
+
+#Set up the plotting vectors, first for Democrats
+x1 <- rep(0,50)
+x2 <- rep(113,50)
+y1 <- (pmdf$X.Intercept.) + pmdf$acres*stacres
+y2 <- y1 + 113*(pmdf$pactotal + pmdf$acres.pactotal*stacres)
+
+dem.df <- data_frame(
+  state = state_info$state,
+  party = rep("D",50),
+  x1 = x1,
+  x2 = x2,
+  y1 = y1,
+  y2 = y2
+)
+
+#Turn wide into long
+# Probably more efficient way to do this
+dem.xlong <- dem.df %>% 
+  mutate(id=paste0(state,party)) %>% 
+  gather(key = 'whichx', value = 'x',x1:x2) %>%
+  select(-(y1:y2)) %>% 
+  arrange(state)
+
+dem.ylong <- dem.df %>% 
+  gather(key = 'whichy', value = 'y',y1:y2) %>%
+  select(-(x1:x2)) %>% 
+  arrange(state)
+
+dem.long <- cbind(dem.xlong,select(dem.ylong,whichy,y))
+
+
+# Now, the lines for Republicans
+
+y1 <- pmdf$X.Intercept. + pmdf$acres*stacres + 
+    pmdf$partyRepublican + pmdf$partyRepublican.acres*stacres
+y2 <- y1 + 113*(pmdf$pactotal + pmdf$acres.pactotal*stacres)
+
+rep.df <- data_frame(
+  state = state_info$state,
+  party = rep("R",50),
+  x1 = x1,
+  x2 = x2,
+  y1 = y1,
+  y2 = y2
+)
+
+#Turn wide into long
+# Probably more efficient way to do this
+rep.xlong <- rep.df %>% 
+  mutate(id=paste0(state,party)) %>% 
+  gather(key = 'whichx', value = 'x',x1:x2) %>%
+  select(-(y1:y2)) %>% 
+  arrange(state)
+
+rep.ylong <- rep.df %>% 
+  gather(key = 'whichy', value = 'y',y1:y2) %>%
+  select(-(x1:x2)) %>% 
+  arrange(state)
+
+rep.long <- cbind(rep.xlong,select(rep.ylong,whichy,y))
+
+# Combine
+bluplines <- rbind(dem.long,rep.long)
+```
+
+```{r plotmod3blupsC}
+
+# Updated scales, percent options here
+ggplot(bluplines,aes(x = x, y = y, group = id, colour = party)) +
+  geom_line(aes(linetype=party)) +
+  xlab("PAC contributions ($K)") +
+  ylab("Predicted protobacco voting (%)\n") +
+  coord_cartesian(xlim = c(0,115),ylim = c(0,1)) +
+  scale_y_continuous(labels=percent) +
+  scale_linetype_manual(name="Party",values=c("solid","longdash"),labels = c("Democrat","Republican")) +
+  scale_color_manual(name = "Party",
+                     labels = c("Democrat","Republican"),
+                     values=c("#9999CC","#CC6666")) +
+  theme_bw() +
+  theme(legend.position = c(.70,.20),
+        legend.title=element_text(size=14),
+        legend.text=element_text(size=12),
+        legend.background = element_rect(colour = NA, fill = "gray80"),
+        legend.key.width = unit(2, "line"))
+
+```
+
+
+```{r plotmod3blups}
+
+ggplot(bluplines,aes(x = x, y = y, group = id, colour = party)) +
+  geom_line(aes(linetype=party)) +
+  xlab("PAC contributions ($K)") +
+  ylab("Predicted protobacco voting (%)\n") +
+  coord_cartesian(xlim = c(0,115),ylim = c(0,1)) +
+  scale_y_continuous(labels=percent) +
+  scale_linetype_manual(name="Party",values=c("solid","longdash"),labels = c("Democrat","Republican")) +
+  scale_color_manual(name = "Party",
+                     labels = c("Democrat","Republican"),
+                     values=c("grey40","grey0")) +
+  theme_bw() +
+  theme(legend.position = c(.70,.20),
+        legend.title=element_text(size=14),
+        legend.text=element_text(size=12),
+        legend.key.width = unit(2, "line"))
+
+```
+
+
+```{r plotmod3splomblubs}
+# Two changes to make: reorder states by meaningful value, adjust lines by acres effects.
+state_info <- tvprp %>% 
+  group_by(state) %>%
+  summarise(size = first(n_reps),
+            numRep = sum(party=="Republican")) %>% 
+  mutate(EBint = coef(mod3)$state$'(Intercept)',
+         EBpac = coef(mod3)$state$pactotal,
+         EBprty = coef(mod3)$state$partyRepublican,
+         EBprty_wgt = (numRep/size)*EBprty)
+
+ggplot(data = tvprp, mapping = aes(x = pactotal, y = votepct)) +
+  geom_point() + 
+  facet_wrap( ~ state) + 
+  geom_abline(data=state_info,mapping = aes(intercept = (EBint+EBprty_wgt), slope = EBpac)) +
+  labs(x = "PAC contributions ($K)",y = "Vote %") +
+  theme_bw()
+```
+
+## Centering
+{#sec:centering}
+
+
+
+```{r plotcentering}
+
+xdum <- 0:5
+ydum <- 0:5
+plot(xdum,ydum,type="n",xaxt="n",yaxt="n",
+     xlab=expression(italic("X")),ylab=expression(italic("Y")))
+segments(1,1,4,2)
+segments(1,1.5,4,3.25)
+segments(1,2,4,4.5)
+abline(v=1.5,col="gray50",lty=3)
+abline(v=3.5,col="gray50",lty=3)
+axis(1, at=c(1.5,3.5),labels=c(expression(paste(italic("X")," = 0")),
+                               expression(paste(italic("X"),"* = 0"))))
+
+```
+
+```{r centermodels, echo=FALSE, warning=FALSE, message=FALSE}
+# Model 3 is base model
+
+# Calculations for group mean centering
+tvprpnew <- tvprp %>% 
+  group_by(state) %>%
+  mutate(avgPAC = mean(pactotal)) 
+
+
+mod3grand <- lmer(votepct ~ party*acres + I(pactotal - mean(pactotal))*acres + 
+    (party | state),data=tvprpnew, REML=FALSE)
+
+mod3group <- lmer(votepct ~ party*acres + I(pactotal - avgPAC)*acres + 
+    (party | state),data=tvprpnew, REML=FALSE)
+
+# Only used for a calculation in numbered list below
+# Not being used for now
+prtnum <- as.numeric(tvprp$party)-1
+mod1center <- lmer(votepct ~ I(prtnum - mean(prtnum)) + I(pactotal - mean(pactotal)) + (party|state),data=tvprp,REML=FALSE)
+# summary(mod1center)
+```
+
+
+## Power Analysis
+{#sec:power}
+
+
+### Two Types of Power Analysis
+{#subsec:twotypes}
+
+
+### Power Analysis for Mixed-effects Models
+
+*Note: remove 'eval=FALSE' from the following code chunks to have them run.
+
+```{r setuppower, echo=FALSE,message=FALSE,warning=FALSE}
+library(simr)
+library(lme4)
+library(plyr)
+library(dplyr)
+library(purrr)
+library(ggplot2)
+library(gridExtra)
+library(scales)
+library(LukeMLM)
+data(tvprp)
+```
+
+```{r fullmodel,warning=FALSE}
+modp_full <- lmer(votepct ~ pactotal*acres + (1|state),data=tvprp,REML=TRUE)
+# summary(modp_full)
+```
+
+
+```{r fullpower, eval=FALSE,warning=FALSE}
+# Use to see power of the simplified model with the full dataset
+pwr_L1 <- powerSim(modp_full, fixed("pactotal",method="kr"),nsim=100)
+pwr_L2 <- powerSim(modp_full, fixed("acres",method="kr"),nsim=100)
+pwr_CLI <- powerSim(modp_full, fixed("pactotal:acres",method="kr"),nsim=100)
+pwr_L1
+pwr_L2
+pwr_CLI
+```
+
+
+```{r setupsubset, warning=FALSE}
+set.seed(2413)
+tvsub <- tvprp %>% 
+  filter(state %in% c("TN","AL","MO","MN","MD")) %>%
+  mutate(stnum = as.numeric(factor(as.character(state)))) %>%
+  group_by(stnum) %>%
+  sample_n(5)
+
+modp_sub <- lmer(votepct ~ pactotal*acres + (1|stnum),data=tvsub,REML=TRUE)
+# summary(modp_sub)
+```
+
+
+```{r subpower, eval=FALSE,warning=FALSE}
+# Use to see power of the subsetted data
+pwr_L1 <- powerSim(modp_sub, fixed("pactotal",method="kr"),nsim=100)
+pwr_L2 <- powerSim(modp_sub, fixed("acres",method="kr"),nsim=100)
+pwr_CLI <- powerSim(modp_sub, fixed("pactotal:acres",method="kr"),nsim=100)
+# pwr_L1
+# pwr_L2
+# pwr_CLI
+```
+
+
+```{r groupfunctions, warning=FALSE}
+mgrp_sim_L1 <- function(groups){
+
+# Assumes lmer object is available  
+if (groups == 5)
+  {mod_ext <- modp_sub}
+else 
+  {mod_ext <- extend(modp_sub, along="stnum", n=groups)}
+  
+pwr_ext <- powerSim(mod_ext, fixed("pactotal",method="kr"),nsim=100,
+                    progress=FALSE)
+
+pwr.df <- data.frame(
+groups = groups,
+pwr_est = summary(pwr_ext)$mean,
+pwr_li = summary(pwr_ext)$lower,
+pwr_hi = summary(pwr_ext)$upper)
+
+return(pwr.df)
+  
+}
+
+mgrp_sim_L2 <- function(groups){
+
+# Assumes lmer object is available  
+if (groups == 5)
+  {mod_ext <- modp_sub}
+else 
+  {mod_ext <- extend(modp_sub, along="stnum", n=groups)}
+  
+pwr_ext <- powerSim(mod_ext, fixed("acres",method="kr"),nsim=100,
+                    progress=FALSE)
+
+pwr.df <- data.frame(
+groups = groups,
+pwr_est = summary(pwr_ext)$mean,
+pwr_li = summary(pwr_ext)$lower,
+pwr_hi = summary(pwr_ext)$upper)
+
+return(pwr.df)
+  
+}
+
+mgrp_sim_CLI <- function(groups){
+
+# Assumes lmer object is available
+  
+if (groups == 5)
+  {mod_ext <- modp_sub}
+else 
+  {mod_ext <- extend(modp_sub, along="stnum", n=groups)}
+  
+pwr_ext <- powerSim(mod_ext, fixed("pactotal:acres",method="kr"),nsim=100,
+                    progress=FALSE)
+
+pwr.df <- data.frame(
+groups = groups,
+pwr_est = summary(pwr_ext)$mean,
+pwr_li = summary(pwr_ext)$lower,
+pwr_hi = summary(pwr_ext)$upper)
+
+return(pwr.df)
+  
+}
+```
+
+```{r groupsims, eval=FALSE,warning=FALSE}
+
+# For now instead of running these (which take a lot of time),
+# loading pre-saved data
+
+g <- as.list(seq(5,50,5))
+pg_L1.df <- adply(g,1,mgrp_sim_L1)
+pg_L2.df <- adply(g,1,mgrp_sim_L2)
+pg_CLI.df <- adply(g,1,mgrp_sim_CLI)
+```
+
+
+```{r repfunctions, warning=FALSE}
+mrep_sim_L1 <- function(groups){
+
+# Assumes lmer object is available  
+if (groups == 5)
+  {mod_ext <- modp_sub}
+else 
+  {mod_ext <- extend(modp_sub, within="stnum", n=groups)}
+  
+pwr_ext <- powerSim(mod_ext, fixed("pactotal",method="kr"),nsim=100,
+                    progress=FALSE)
+
+pwr.df <- data.frame(
+groups = groups,
+pwr_est = summary(pwr_ext)$mean,
+pwr_li = summary(pwr_ext)$lower,
+pwr_hi = summary(pwr_ext)$upper)
+
+return(pwr.df)
+  
+}
+
+mrep_sim_L2 <- function(groups){
+
+# Assumes lmer object is available  
+if (groups == 5)
+  {mod_ext <- modp_sub}
+else 
+  {mod_ext <- extend(modp_sub, within="stnum", n=groups)}
+  
+pwr_ext <- powerSim(mod_ext, fixed("acres",method="kr"),nsim=100,
+                    progress=FALSE)
+
+pwr.df <- data.frame(
+groups = groups,
+pwr_est = summary(pwr_ext)$mean,
+pwr_li = summary(pwr_ext)$lower,
+pwr_hi = summary(pwr_ext)$upper)
+
+return(pwr.df)
+  
+}
+
+mrep_sim_CLI <- function(groups){
+
+# Assumes lmer object is available
+  
+if (groups == 5)
+  {mod_ext <- modp_sub}
+else 
+  {mod_ext <- extend(modp_sub, within="stnum", n=groups)}
+  
+pwr_ext <- powerSim(mod_ext, fixed("pactotal:acres",method="kr"),nsim=100,
+                    progress=FALSE)
+
+pwr.df <- data.frame(
+groups = groups,
+pwr_est = summary(pwr_ext)$mean,
+pwr_li = summary(pwr_ext)$lower,
+pwr_hi = summary(pwr_ext)$upper)
+
+return(pwr.df)
+  
+}
+```
+
+
+```{r repsims, eval=FALSE,warning=FALSE}
+
+# For now instead of running these (which take a lot of time),
+# loading pre-saved data (above)
+
+g <- as.list(seq(5,50,5))
+pr_L1.df <- adply(g,1,mrep_sim_L1)
+pr_L2.df <- adply(g,1,mrep_sim_L2)
+pr_CLI.df <- adply(g,1,mrep_sim_CLI)
+```
+
+
+```{r powerfig1,  eval=FALSE,warning=FALSE}
+p1 <- ggplot(pg_L1.df, aes(x=groups, y=pwr_est)) +
+  geom_errorbar(aes(ymin=pwr_li, ymax=pwr_hi),
+                color="grey25",
+                size=.7,width=1.5) +
+  geom_line() +
+  geom_point(size=2) +
+  scale_y_continuous(labels=percent, limits=c(0,1.05),breaks=c(seq(0,1,.2))) +
+  geom_hline(yintercept=.8,linetype="dashed",color="grey30") +
+  xlab("States") +
+  ylab("Estimated power") +
+  labs(title=expression(paste("L1 - ",italic("Money")))) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust=.5),
+        axis.title.x=element_blank())
+
+
+p2 <- ggplot(pg_L2.df, aes(x=groups, y=pwr_est)) +
+  geom_errorbar(aes(ymin=pwr_li, ymax=pwr_hi),
+                color="grey25",
+                size=.7,width=1.5) +
+  geom_line() +
+  geom_point(size=2) +
+  scale_y_continuous(labels=percent, limits=c(0,1.05),breaks=c(seq(0,1,.2))) +
+  geom_hline(yintercept=.8,linetype="dashed",color="grey30") +
+  xlab("States") +
+  ylab("Estimated power") +
+  labs(title=expression(paste("\nL2 - ",italic("Acres")))) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust=.5),
+        axis.title.x=element_blank())
+
+p3 <- ggplot(pg_CLI.df, aes(x=groups, y=pwr_est)) +
+  geom_errorbar(aes(ymin=pwr_li, ymax=pwr_hi),
+                color="grey25",
+                size=.7,width=1.5) +
+  geom_line() +
+  geom_point(size=2) +
+  scale_y_continuous(labels=percent, limits=c(0,1.05),breaks=c(seq(0,1,.2))) +
+  geom_hline(yintercept=.8,linetype="dashed",color="grey30") +
+  xlab("States") +
+  ylab("Estimated power\n") +
+#  labs(title="\nCLI - Money by Acres") +
+  labs(title=expression(paste("\nCLI - ",italic("Money")," by ",italic("Acres")))) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust=.5))
+
+
+p4 <- ggplot(pr_L1.df, aes(x=groups, y=pwr_est)) +
+  geom_errorbar(aes(ymin=pwr_li, ymax=pwr_hi),
+                color="grey25",
+                size=.7,width=1.5) +
+  geom_line() +
+  geom_point(size=2) +
+  scale_y_continuous(labels=percent, limits=c(0,1.05),breaks=c(seq(0,1,.2))) +
+  geom_hline(yintercept=.8,linetype="dashed",color="grey30") +
+  xlab("Reps within states") +
+  ylab("Estimated power") +
+#  labs(title="L1 - Money") +
+  labs(title=expression(paste("L1 - ",italic("Money")))) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust=.5),
+        axis.title.y=element_blank(),
+        axis.title.x=element_blank())
+
+p5 <- ggplot(pr_L2.df, aes(x=groups, y=pwr_est)) +
+  geom_errorbar(aes(ymin=pwr_li, ymax=pwr_hi),
+                color="grey25",
+                size=.7,width=1.5) +
+  geom_line() +
+  geom_point(size=2) +
+  scale_y_continuous(labels=percent, limits=c(0,1.05),breaks=c(seq(0,1,.2))) +
+  geom_hline(yintercept=.8,linetype="dashed",color="grey30") +
+  xlab("Reps within states") +
+  ylab("Estimated power\n") +
+#  labs(title="\nL2 - Acres") +
+  labs(title=expression(paste("\nL2 - ",italic("Acres")))) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust=.5),
+        axis.title.y=element_blank(),
+        axis.title.x=element_blank())
+
+p6 <- ggplot(pr_CLI.df, aes(x=groups, y=pwr_est)) +
+  geom_errorbar(aes(ymin=pwr_li, ymax=pwr_hi),
+                color="grey25",
+                size=.7,width=1.5) +
+  geom_line() +
+  geom_point(size=2) +
+  scale_y_continuous(labels=percent, limits=c(0,1.05),breaks=c(seq(0,1,.2))) +
+  geom_hline(yintercept=.8,linetype="dashed",color="grey30") +
+  xlab("Reps within states") +
+  ylab("Estimated power\n") +
+#  labs(title="\nCLI - Money by Acres") +
+  labs(title=expression(paste("\nCLI - ",italic("Money")," by ",italic("Acres")))) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust=.5),
+        axis.title.y=element_blank())
+
+grid.arrange(p1,p2,p3,p4,p5,p6, ncol = 2, as.table = FALSE)
+
+```
+
