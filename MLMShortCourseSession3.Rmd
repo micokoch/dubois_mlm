@@ -199,7 +199,8 @@ lma_1_cor1 <- lme(numadl ~ poly(newage,2) + sex, random = ~1|caseid, data = lsoa
 summary(lma_1_cor1)
 
 # Compound symmetry
-lma_1_cor2 <- lme(numadl ~ poly(newage,2) + sex, random = ~1|caseid, data = lsoadat, correlation=corCompSymm(form=~1|caseid))
+lma_1_cor2 <- lme(numadl ~ poly(newage,2) + sex, random = ~1|caseid, data = lsoadat, 
+                  correlation=corCompSymm(form=~1|caseid))
 summary(lma_1_cor2)
 
 # Autoregressive
