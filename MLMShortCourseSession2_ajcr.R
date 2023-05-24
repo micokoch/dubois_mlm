@@ -62,3 +62,41 @@ hdp$LengthofStaycwc <- center(hdp$LengthofStay, type = "CWC", cluster=hdp$DID)
 
 ## code for centering length of stay
 hdp$LengthofStayc <- scale(hdp$LengthofStay, center=TRUE, scale=FALSE)
+
+
+## Class #3
+library(r2mlm)
+l1pred2 <- lmer(tumorsize ~ (1|DID), hdp)
+r2test <- r2mlm(l1pred2)
+
+# Garth Rauscher code
+library(misty)
+
+hdpsub <- select(hdp, tumorsize, Age, LengthofStay, DID)
+hdpsub$LengthofStaycgm <- center(hdpsub$LengthofStay,type="CGM")
+hdpsub$LengthofStaycwc <- center(hdpsub$LengthofStay,type="CWC", cluster=hdpsub$DID)
+hdpsub$Agecgm <- center(hdpsub$Age,type="CGM")
+hdpsub$Agecwc <- center(hdpsub$Age,type="CWC", cluster=hdpsub$DID)
+
+l1rsqcl2r=lmer(tumorsize ~ Agecwc+ LengthofStaycwc + (1+LengthofStaycwc|DID), 
+               REML=FALSE, data=hdpsub, control=lmerControl(optimizer="bobyqa"))
+summary(l1rsqcl2r)
+r2mlm(l1rsqcl2r,bargraph = T)
+
+# Jordan Barone code
+library(haven)
+safety <- read_sav("Safety_1.sav")
+
+ggplot(safety, aes(x = crowded, y = binunsafe)) + 
+  stat_sum(aes(size = ..n.., group = 1)) + 
+  scale_size_area(max_size=10)
+
+binary1 <- glmer(binunsafe~age10c+ sex + crowded + (1+age10c|street),family=binomial,data=safety)
+
+#get confints and lod-odds, odds ratios!
+se <- sqrt(diag(vcov(binary1)))
+binary1ci <- cbind(Est = fixef(binary1), LL = fixef(binary1) - 1.96 * se, 
+                   UL = fixef(binary1) + 1.96 * se)
+binary1cior <- exp(binary1ci) 
+summary(binary1cior)
+binary1cior
