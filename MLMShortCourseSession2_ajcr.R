@@ -93,10 +93,25 @@ ggplot(safety, aes(x = crowded, y = binunsafe)) +
 
 binary1 <- glmer(binunsafe~age10c+ sex + crowded + (1+age10c|street),family=binomial,data=safety)
 
-#get confints and lod-odds, odds ratios!
+# get confints and lod-odds, odds ratios!
 se <- sqrt(diag(vcov(binary1)))
 binary1ci <- cbind(Est = fixef(binary1), LL = fixef(binary1) - 1.96 * se, 
                    UL = fixef(binary1) + 1.96 * se)
 binary1cior <- exp(binary1ci) 
 summary(binary1cior)
 binary1cior
+
+# New David DuBois code
+library(performance)
+check_overdispersion(binary1)
+
+overdisp_fun <- function(model) {
+  rdf <- df.residual(model)
+  rp <- residuals(model,type="pearson")
+  Pearson.chisq <- sum(rp^2)
+  prat <- Pearson.chisq/rdf
+  pval <- pchisq(Pearson.chisq, df=rdf, lower.tail=FALSE)
+  c(chisq=Pearson.chisq,ratio=prat,rdf=rdf,p=pval)
+}
+
+overdisp_fun(binary1)
