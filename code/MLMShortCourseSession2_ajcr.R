@@ -124,3 +124,31 @@ plot(x,ypred,type="l",col="black",lty=1,
      xlim=c(65,105),ylim=c(0,7),
      ylab="Predicted number of ADLs",xlab="Age")
 
+
+## Class 4 David DuBois code
+# And also from: https://stats.oarc.ucla.edu/r/examples/mlm-ma-hox/r-mlm-chp-7/
+library(foreign)
+library(lme4)
+library(lmerTest)
+
+pupcross<-read.dta("https://stats.idre.ucla.edu/stat/stata/examples/mlm_ma_hox/pupcross.dta")
+# data(pupcross)
+
+m1<-lmer(achiev ~ 1 + (1|sschool) + (1|pschool), 
+         data=pupcross, REML=FALSE)
+summary(m1)
+
+m2 <-lmer(achiev ~ pupsex + pupses + 
+            (1|sschool) + (1|pschool), data=pupcross, REML=FALSE)
+summary(m2)
+
+m3 <-lmer(achiev ~ pupsex + pupses + pdenom + sdenom +
+            (1|sschool) + (1|pschool), data=pupcross, REML=FALSE)
+summary(m3)
+
+m4 <-lmer(achiev ~ pupsex + pupses + pdenom + sdenom +
+            (pupses|sschool) + (pupses|pschool), data=pupcross, REML=FALSE)
+summary(m4)
+
+anova(m1,m2,m3,m4)
+
