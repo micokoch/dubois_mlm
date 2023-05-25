@@ -115,3 +115,12 @@ overdisp_fun <- function(model) {
 }
 
 overdisp_fun(binary1)
+
+### - Missing some parts of code, and copied this from Zoom chat
+lma_quad <- lmer(numadl ~ newage + I(newage^2) + (1|caseid), data = lsoa, REML = FALSE)
+x <- seq(70,103,.01)
+ypred <- (fixef(lma_quad)[1] + fixef(lma_quad)[2]*(x) + fixef(lma_quad)[3]*(x^2))
+plot(x,ypred,type="l",col="black",lty=1,
+     xlim=c(65,105),ylim=c(0,7),
+     ylab="Predicted number of ADLs",xlab="Age")
+
