@@ -1,7 +1,7 @@
 library(tidyverse)
 library(readxl)
 # hdp <- read_excel("C:/Users/dldub/Downloads/hdp.xlsx")
-hdp <- read.csv("hdp.csv")
+hdp <- read.csv("data/hdp.csv")
 View(hdp)
 library(lme4)
 library(lmerTest)
@@ -85,7 +85,7 @@ r2mlm(l1rsqcl2r,bargraph = T)
 
 # Jordan Barone code
 library(haven)
-safety <- read_sav("Safety_1.sav")
+safety <- read_sav("data/Safety_1.sav")
 
 ggplot(safety, aes(x = crowded, y = binunsafe)) + 
   stat_sum(aes(size = ..n.., group = 1)) + 
